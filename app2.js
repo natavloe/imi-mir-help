@@ -1,0 +1,122 @@
+/* IMI MIR - Help: чаты, файлы, отмена сделок, профили, отзывы (подключается после app.js) */
+Object.assign(lab,{paid:'Оплачен',done:'Завершён',cancelled:'Отменён'});
+Object.assign(ERR,{file_too_big:'Файл больше 50 МБ',bad_file:'Этот тип файла запрещён',already_reviewed:'Отзыв уже оставлен',name_check:'Имя: от 2 до 50 символов'});
+const BAD=/\.(exe|bat|cmd|com|msi|scr|ps1|vbs|js|jar|sh|apk|dll|lnk)$/i,MAXF=50*1024*1024;
+let FURL={},PF=null,PREV=[],MYREV=false;
+
+/* ---------- данные ---------- */
+async function loadReq(){const {data,error}=await sb.from('v_requests').select('*').order('created_at',{ascending:false});if(!error)R=(data||[]).map(x=>({id:x.id,s:x.subject,text:x.body,amount:x.amount,due:x.due,status:x.status,role:x.my_role,cid:x.customer_id,pid:x.performer_id,cn:x.customer_name,pn:x.performer_name,cb:x.cancel_by}))}
+async function loadMsgs(){
+ if(!st.rid)return;
+ const {data}=await sb.from('messages').select('*').eq('request_id',st.rid).order('created_at');MSG=data||[];
+ const ps=MSG.filter(m=>m.file_path&&!FURL[m.file_path]).map(m=>m.file_path);
+ if(ps.length){const {data:u}=await sb.storage.from('chat-files').createSignedUrls(ps,3600);(u||[]).forEach(x=>{if(x.signedUrl)FURL[x.path]=x.signedUrl})}
+ if(st.me){const {data:rv}=await sb.from('reviews').select('id').eq('request_id',st.rid).eq('author_id',st.me.id);MYREV=!!(rv&&rv.length)}
+}
+async function loadPf(id){
+ const [a,b]=await Promise.all([sb.from('v_public_profiles').select('*').eq('id',id).maybeSingle(),sb.from('reviews').select('*').eq('target_id',id).order('created_at',{ascending:false}).limit(20)]);
+ PF=a.data||{id,name:'Студент',about:'',done:0,reviews:0};PREV=b.data||[];st.noAnim=true;render();
+}
+
+/* ---------- помощники ---------- */
+const other=r=>r.role==='customer'?{id:r.pid,n:r.pn}:{id:r.cid,n:r.cn};
+const roleTag=r=>r.role==='customer'?'<span class="role cust">Вы заказчик</span>':'<span class="role perf">Вы исполнитель</span>';
+const plink=(id,n)=>`<button class="lnk" onclick="openProfile('${id}')">${esc(n||'Студент')}</button>`;
+function openProfile(id){st.pb={v:st.view,id:st.view==='chat'?st.rid:st.sid};go('profile',id)}
+function needChats(){if(!st.me)return needAuth('Войдите, чтобы увидеть чаты');go('chats')}
+
+/* ---------- навигация и рендер ---------- */
+const _go=go;
+go=function(v,id){
+ if(v==='profile'){st.view='profile';st.form=false;st.pid=id;PF=null;PREV=[];render();window.scrollTo(0,0);loadPf(id);return}
+ if(v==='chats'){st.from=null;leaveChat();st.view='chats';render();window.scrollTo(0,0);refresh();return}
+ _go(v,id);
+};
+const _render=render;
+render=function(){
+ if(st.view==='chats'||st.view==='profile'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():profileHtml();st.noAnim=false;st.pop=false}
+ else _render();
+};
+function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
+function navHtml(){
+ const v=st.view,ch=v==='chats'||st.from==='chats',d=v==='deals'||st.from==='deals',p=st.role==='p',n=Object.values(SUM).reduce((s,x)=>s+(x.unread||0),0);
+ const b=(c,l,f)=>`<button class="${c?'on':''}" onclick="${f}">${l}</button>`;
+ return `<div class="tabs" style="max-width:${p?460:300}px;margin:6px 0 0">${b(!ch&&!d,'Запросы',"go('home')")}${b(ch,'Все чаты'+(n?`<span class="badge">${n}</span>`:''),'needChats()')}${p?b(d,'Мои сделки','needDeals()'):''}</div>`;
+}
+const _rc=reqCard;
+reqCard=function(r){
+ const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
+ return _rc(r).replace('<div class="meta">',who+'<div class="meta">');
+};
+
+/* ---------- экраны ---------- */
+function chatsHtml(){
+ const f=st.cf||'active',all=R.filter(r=>r.role&&r.status!=='open'),G={active:/^(taken|paid)$/,done:/^done$/,cancelled:/^cancelled$/};
+ const T=[['active','Активные'],['done','Завершённые'],['cancelled','Отменённые']],list=all.filter(r=>G[f].test(r.status)).sort((x,y)=>((SUM[y.id]||{}).last_at||'').localeCompare((SUM[x.id]||{}).last_at||''));
+ return `<h1 class="${ra()}">Все чаты</h1><div class="tabs ${ra()}" style="max-width:460px">${T.map(x=>`<button class="${f===x[0]?'on':''}" onclick="st.cf='${x[0]}';st.noAnim=true;render()">${x[1]} ${all.filter(r=>G[x[0]].test(r.status)).length}</button>`).join('')}</div><div class="list">${list.length?list.map(r=>`<button class="card ${ra()}" onclick="st.from='chats';go('chat',${r.id})"><div class="row">${roleTag(r)}<span class="tag ${r.status}">${lab[r.status]}</span></div><div class="row"><b>${esc(other(r).n||'Студент')}</b>${un(r)}</div><span class="sub">${S[r.s]}</span><div class="sub">${pv(r)}</div></button>`).join(''):'<div class="sub">Здесь пока пусто</div>'}</div>`;
+}
+function profileHtml(){
+ const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
+ if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
+ const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
+ return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<h2 class="sec">Настройки профиля</h2><div class="card"><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name)}"><label>О себе</label><textarea id="pf_a" maxlength="500">${esc(p.about||'')}</textarea><button class="btn" onclick="saveProf()">Сохранить</button></div>`:''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+}
+function chatHtml(r){
+ const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
+ const bk=st.from==='chats'?`<button class="back" onclick="go('chats')">← Все чаты</button>`:st.from==='deals'?`<button class="back" onclick="go('deals')">← Мои сделки</button>`:`<button class="back" onclick="go('subject',${r.s})">← ${S[r.s]}</button>`;
+ let act='';
+ if(r.status==='taken'&&cust)act=`<button class="btn" ${w} onclick="payIt(${r.id})">Оплатить ${r.amount} ₽</button><p class="hint" style="margin-top:8px;text-align:center">Деньги удержатся до вашего подтверждения. На балансе: ${fm((st.prof&&st.prof.balance)||0)}</p>`;
+ if(r.status==='paid')act=cust?`<button class="btn" ${w} onclick="confirmIt(${r.id})">Подтвердить выполнение</button><p class="hint" style="margin-top:8px;text-align:center">Нажми, когда работа тебя устроила: деньги уйдут исполнителю</p>`:`<div class="pay">Заказчик оплатил, деньги удержаны. Вы получите <b>${r.amount} ₽</b> после подтверждения.</div>`;
+ if(r.status==='done')act=`<div class="pay">${cust?'Сделка завершена. Спасибо!':`Сделка завершена. На баланс зачислено: <b>${r.amount} ₽</b>`}</div>`+(MYREV?'<p class="hint">Отзыв оставлен</p>':`<div class="rv"><label>Оценка собеседнику</label><select id="rv_n">${[5,4,3,2,1].map(n=>`<option>${n}</option>`).join('')}</select><textarea id="rv_t" placeholder="Короткий отзыв (по желанию)"></textarea><button class="btn" onclick="review(${r.id})">Оставить отзыв</button></div>`);
+ if(r.status==='cancelled')act='<div class="pay">Сделка отменена по согласию сторон. Если деньги были оплачены, они вернулись заказчику.</div>';
+ if(live)act+=!r.cb?`<button class="btn ghost" ${w} onclick="cancelAsk(${r.id})">Предложить отмену сделки</button>`:r.cb===meId?`<div class="pay" style="margin-top:10px">Вы предложили отменить сделку. Ждём ответа.</div><button class="btn ghost" ${w} onclick="cancelAns(${r.id},false)">Отозвать предложение</button>`:`<div class="pay" style="margin-top:10px">Собеседник предлагает отменить сделку.</div><div class="two" style="margin-top:8px"><button class="btn" onclick="cancelAns(${r.id},true)">Согласиться</button><button class="btn ghost" onclick="cancelAns(${r.id},false)">Отклонить</button></div>`;
+ const n=MSG.length,msgs=MSG.map((m,i)=>{const u=m.file_path&&FURL[m.file_path],ty=m.file_type||'',f=m.file_path?(u?(/^image\//.test(ty)?`<img src="${u}" class="att" alt="">`:/^video\//.test(ty)?`<video src="${u}" class="att" controls></video>`:`<a href="${u}" target="_blank" rel="noopener">📎 ${esc(m.file_name||'файл')}</a>`):'📎 …'):'';return `<div class="msg ${m.kind==='sys'?'sys':m.sender_id===meId?'me':''} ${st.pop&&i===n-1?'pop':''}">${f}${m.body?`<div>${esc(m.body)}</div>`:''}</div>`}).join('')||'<div class="msg sys">Начните диалог</div>';
+ const inp=live?`<div class="send"><label class="btn ghost clip" title="Прикрепить файл (до 50 МБ)">📎<input type="file" hidden onchange="attach(${r.id},this)"></label><input type="text" id="mt" placeholder="Сообщение…" maxlength="2000" onkeydown="if(event.key==='Enter')send(${r.id})"><button class="btn" onclick="send(${r.id})">➤</button></div>`:'';
+ return `${bk}<div class="card ${ra()}" style="margin-top:12px"><div class="row">${roleTag(r)}<span>${cust?'Исполнитель':'Заказчик'}: ${plink(o.id,o.n)}</span></div><div>${esc(r.text)}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div></div><div class="steps ${ra()}"><div class="on">Запрос</div><div class="${step>=1?'on':''}">В работе</div><div class="${step>=2?'on':''}">Оплачено</div></div><div class="card ${ra()}"><div class="chat" id="chat">${msgs}</div>${inp}${act}</div>`;
+}
+
+/* ---------- действия ---------- */
+async function rpc(n,a,ok){
+ const {error}=await sb.rpc(n,a);if(error){t(em(error));return false}
+ await Promise.all([loadReq(),loadProf(),loadMsgs()]);st.noAnim=true;st.pop=true;render();if(ok)t(ok);return true;
+}
+const confirmIt=id=>rpc('confirm_request',{p_id:id},'Выполнение подтверждено');
+const cancelAsk=id=>rpc('propose_cancel',{p_id:id},'Предложение отправлено');
+const cancelAns=(id,a)=>rpc('answer_cancel',{p_id:id,p_accept:a});
+const review=id=>rpc('leave_review',{p_id:id,p_rating:+$('rv_n').value,p_text:$('rv_t').value.trim()},'Спасибо за отзыв');
+async function attach(id,inp){
+ const f=inp.files[0];inp.value='';if(!f)return;
+ if(f.size>MAXF)return t('Файл больше 50 МБ');
+ if(BAD.test(f.name))return t('Этот тип файла запрещён');
+ t('Загрузка…');
+ const ext=(f.name.split('.').pop()||'bin').replace(/[^a-z0-9]/gi,'').slice(0,8)||'bin',p=`${id}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+ const u=await sb.storage.from('chat-files').upload(p,f,{contentType:f.type||'application/octet-stream'});
+ if(u.error)return t('Не удалось загрузить файл');
+ const body=($('mt')&&$('mt').value.trim())||'';
+ const {error}=await sb.rpc('send_attachment',{p_id:id,p_path:p,p_name:f.name.slice(0,200),p_type:f.type||'',p_size:f.size,p_body:body});
+ if(error)return t(em(error));
+ if($('mt'))$('mt').value='';await loadMsgs();st.noAnim=true;st.pop=true;render();t('Файл отправлен');
+}
+async function saveProf(){
+ const {error}=await sb.rpc('update_profile',{p_name:$('pf_n').value.trim(),p_about:$('pf_a').value.trim()});
+ if(error)return t(em(error));
+ await Promise.all([loadProf(),loadPf(st.me.id)]);t('Профиль сохранён');
+}
+
+/* ---------- v3: последнее сообщение и непрочитанные ---------- */
+let SUM={},allCh=null;
+const pv=r=>{const x=SUM[r.id];if(!x||x.last_at==null)return 'Сообщений пока нет';const b=(x.has_file?'📎 ':'')+(x.last_body||(x.has_file?'Файл':''));return esc((x.last_sender===(st.me&&st.me.id)?'Вы: ':'')+b.slice(0,90))};
+const un=r=>{const n=(SUM[r.id]||{}).unread;return n?`<span class="badge">${n}</span>`:''};
+async function loadSum(){if(!st.me){SUM={};return}const {data}=await sb.rpc('my_chat_summary');SUM={};(data||[]).forEach(x=>SUM[x.request_id]=x)}
+const _rf=refresh;
+refresh=async function(){await _rf();await loadSum();st.noAnim=true;render()};
+const _lm=loadMsgs;
+loadMsgs=async function(){await _lm();if(st.me&&st.view==='chat'&&st.rid){sb.rpc('mark_read',{p_id:st.rid});if(SUM[st.rid])SUM[st.rid].unread=0}};
+function subAll(){
+ if(allCh||!st.me)return;
+ allCh=sb.channel('all-msgs').on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},async p=>{
+  if(st.view==='chat'&&p.new.request_id===st.rid)return;
+  await loadSum();$('nav').innerHTML=navHtml();if(st.view==='chats'){st.noAnim=true;render()}
+ }).subscribe();
+}
+sb.auth.onAuthStateChange((ev,s)=>{if(s)setTimeout(subAll,0);else if(allCh){sb.removeChannel(allCh);allCh=null}});

@@ -101,3 +101,14 @@ body::after{display:none}
 .plus{color:var(--text)}
 .card{border-radius:16px}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
+
+/* v2: роли, профиль, вложения */
+.role{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.role.cust{background:#e8f0fe;color:#1a56db}
+.role.perf{background:#e6f6ec;color:#15803d}
+.tag.done::before{background:#15803d}.tag.cancelled::before{background:#9ca3af}
+.who-p{display:flex;align-items:center;gap:8px;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit}
+.att{display:block;max-width:100%;max-height:260px;border-radius:8px;margin-bottom:4px}
+.clip{padding:0 12px;display:inline-flex;align-items:center;cursor:pointer}
+.rv{display:grid;gap:8px;margin-top:10px}
+.rv select{padding:8px;border-radius:8px;border:1px solid #ddd;font:inherit}
