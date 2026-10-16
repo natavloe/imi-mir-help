@@ -35,7 +35,7 @@ go=function(v,id){
 };
 const _render=render;
 render=function(){
- if(st.view==='chats'||st.view==='profile'||st.view==='disputes'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():profileHtml();st.noAnim=false;st.pop=false}
+ if(st.view==='chats'||st.view==='profile'||st.view==='disputes'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():profileHtml();if(st.view==='profile')drawQr();st.noAnim=false;st.pop=false}
  else _render();
 };
 function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
@@ -60,7 +60,7 @@ function profileHtml(){
  const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
  if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
  const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
- return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<h2 class="sec">Настройки профиля</h2><div class="card"><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name)}"><label>О себе</label><textarea id="pf_a" maxlength="500">${esc(p.about||'')}</textarea><button class="btn" onclick="saveProf()">Сохранить</button></div>`:''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+ return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<h2 class="sec">Настройки профиля</h2><div class="card"><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name)}"><label>О себе</label><textarea id="pf_a" maxlength="500">${esc(p.about||'')}</textarea><button class="btn" onclick="saveProf()">Сохранить</button></div>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
@@ -142,3 +142,29 @@ async function resolveIt(id,d){
  if(error)return t(em(error));
  t('Спор решён');go('disputes');
 }
+
+/* ---------- v5: ссылка и QR профиля, проверка баланса ---------- */
+const profLink=id=>location.origin+location.pathname+'#u='+id;
+const shareHtml=id=>`<h2 class="sec">Поделиться профилем</h2><div class="card"><input type="text" id="pl" readonly value="${profLink(id)}" onclick="this.select()"><div class="two" style="margin-top:8px"><button class="btn" onclick="copyLink()">Скопировать ссылку</button>${navigator.share?`<button class="btn ghost" onclick="shareLink()">Отправить…</button>`:''}</div><div id="qr" class="qr"></div><p class="hint" style="text-align:center">QR-код ведёт на твой профиль. Друзьям нужно войти в аккаунт, чтобы его открыть.</p></div>`;
+function drawQr(){const e=$('qr');if(!e)return;if(typeof qrcode==='undefined'){e.textContent='QR-код не загрузился, но ссылка работает';return}const q=qrcode(0,'M');q.addData(profLink(st.me.id));q.make();e.innerHTML='<img alt="QR-код профиля" src="'+q.createDataURL(6,4)+'">'}
+function copyLink(){const l=profLink(st.me.id);(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(()=>t('Ссылка скопирована')).catch(()=>{const i=$('pl');i.select();document.execCommand('copy');t('Ссылка скопирована')})}
+function shareLink(){navigator.share({title:'Мой профиль в IMI MIR - Help',url:profLink(st.me.id)}).catch(()=>{})}
+let HID=(location.hash.match(/^#u=([0-9a-f-]{36})$/i)||[])[1]||null;
+function hashGo(){if(!HID||!st.me)return;const i=HID;HID=null;history.replaceState(null,'',location.pathname);st.pb={v:'home'};go('profile',i)}
+sb.auth.onAuthStateChange((ev,s)=>{if(!HID)return;if(s)setTimeout(hashGo,400);else if(ev==='INITIAL_SESSION')setTimeout(()=>needAuth('Войдите, чтобы открыть профиль'),400)});
+
+function modal(h){closeModal();const d=document.createElement('div');d.id='ovl';d.className='ovl';d.onclick=e=>{if(e.target===d)closeModal()};d.innerHTML='<div class="mbox">'+h+'</div>';document.body.appendChild(d)}
+function closeModal(){const d=$('ovl');if(d)d.remove()}
+function lowBal(need){const a=Math.max(need,100);modal(`<h2 style="margin:0 0 8px">Не хватает ${need} ₽</h2><p class="sub" style="margin:0 0 14px">Чтобы опубликовать запрос, на балансе должна быть вся сумма. Пополните баланс, и запрос опубликуется сразу.</p><button class="btn" style="width:100%" onclick="topAndPost(${a})">Пополнить на ${a} ₽ и опубликовать</button><div class="two" style="margin-top:8px"><button class="btn ghost" onclick="closeModal();go('wallet')">Другая сумма</button><button class="btn ghost" onclick="closeModal()">Отмена</button></div>`)}
+async function topAndPost(a){const {error}=await sb.rpc('demo_top_up',{p_amount:a});if(error)return t(em(error));closeModal();await loadProf();$('acc').innerHTML=accHtml();t('Баланс пополнен (демо)');addReq()}
+addReq=async function(){
+ const x=$('f_text').value.trim(),b=+$('f_b').value;
+ if(x.length<10)return t('Опиши запрос подробнее');
+ if(!b||b<50)return t('Укажи бюджет от 50 ₽');
+ if(!$('f_ok').checked)return t('Подтверди условие про помощь в обучении');
+ await loadProf();const need=Math.round(b)-((st.prof&&st.prof.balance)||0);
+ if(need>0)return lowBal(need);
+ const {error}=await sb.rpc('create_request',{p_subject:st.sid,p_body:x,p_budget:Math.round(b),p_due:$('f_d').value||null});
+ if(error){if(/insufficient_funds/.test(error.message||''))return lowBal(Math.round(b));return t(em(error))}
+ st.form=false;await loadReq();render();t('Запрос опубликован');
+};
