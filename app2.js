@@ -60,7 +60,7 @@ function profileHtml(){
  const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
  if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
  const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
- return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<h2 class="sec">Настройки профиля</h2><div class="card"><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name)}"><label>О себе</label><textarea id="pf_a" maxlength="500">${esc(p.about||'')}</textarea><button class="btn" onclick="saveProf()">Сохранить</button></div>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+ return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
@@ -104,7 +104,7 @@ async function attach(id,inp){
 async function saveProf(){
  const {error}=await sb.rpc('update_profile',{p_name:$('pf_n').value.trim(),p_about:$('pf_a').value.trim()});
  if(error)return t(em(error));
- await Promise.all([loadProf(),loadPf(st.me.id)]);t('Профиль сохранён');
+ await Promise.all([loadProf(),loadPf(st.me.id)]);closeModal();t('Профиль сохранён');
 }
 
 /* ---------- v3: последнее сообщение и непрочитанные ---------- */
@@ -173,4 +173,9 @@ function showQr(){
  if(typeof qrcode==='undefined')return t('QR-код не загрузился, используй ссылку');
  const q=qrcode(0,'M');q.addData(profLink(st.me.id));q.make();
  modal(`<h2 style="margin:0 0 12px;text-align:center">Мой профиль</h2><div class="qr"><img alt="QR-код профиля" src="${q.createDataURL(6,4)}"></div><p class="hint" style="text-align:center">Покажи код другу: он откроет твой профиль</p><button class="btn" style="width:100%" onclick="closeModal()">Закрыть</button>`);
+}
+
+function openSettings(){
+ const p=PF||{};
+ modal(`<h2 style="margin:0 0 12px">Настройки профиля</h2><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name||'')}"><label style="margin-top:10px;display:block">О себе</label><textarea id="pf_a" maxlength="500" style="width:100%;min-height:110px">${esc(p.about||'')}</textarea><div class="two" style="margin-top:12px"><button class="btn" onclick="saveProf()">Сохранить</button><button class="btn ghost" onclick="closeModal()">Отмена</button></div>`);
 }

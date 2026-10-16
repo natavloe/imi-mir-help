@@ -117,3 +117,4 @@ body::after{display:none}
 .qr{display:flex;justify-content:center;margin:14px 0}.qr img{width:200px;height:200px;image-rendering:pixelated;border-radius:8px}
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:100}
 .mbox{background:#fff;border-radius:14px;padding:20px;max-width:380px;width:100%}
+.mbox{background:var(--card);color:var(--text);box-shadow:var(--sh);max-height:90vh;overflow:auto}
