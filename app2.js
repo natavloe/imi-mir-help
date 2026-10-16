@@ -20,7 +20,7 @@ async function loadPf(id){
 
 /* ---------- помощники ---------- */
 const other=r=>r.role==='customer'?{id:r.pid,n:r.pn}:{id:r.cid,n:r.cn};
-const roleTag=r=>r.role==='customer'?'<span class="role cust">Вы заказчик</span>':'<span class="role perf">Вы исполнитель</span>';
+const roleTag=r=>r.role==='customer'?'<span class="role cust">Вы заказчик</span>':r.role==='moderator'?'<span class="role mod">Модератор</span>':'<span class="role perf">Вы исполнитель</span>';
 const plink=(id,n)=>`<button class="lnk" onclick="openProfile('${id}')">${esc(n||'Студент')}</button>`;
 function openProfile(id){st.pb={v:st.view,id:st.view==='chat'?st.rid:st.sid};go('profile',id)}
 function needChats(){if(!st.me)return needAuth('Войдите, чтобы увидеть чаты');go('chats')}
@@ -29,19 +29,20 @@ function needChats(){if(!st.me)return needAuth('Войдите, чтобы ув�
 const _go=go;
 go=function(v,id){
  if(v==='profile'){st.view='profile';st.form=false;st.pid=id;PF=null;PREV=[];render();window.scrollTo(0,0);loadPf(id);return}
+ if(v==='disputes'){st.from=null;leaveChat();st.view='disputes';render();window.scrollTo(0,0);loadDisp();return}
  if(v==='chats'){st.from=null;leaveChat();st.view='chats';render();window.scrollTo(0,0);refresh();return}
  _go(v,id);
 };
 const _render=render;
 render=function(){
- if(st.view==='chats'||st.view==='profile'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():profileHtml();st.noAnim=false;st.pop=false}
+ if(st.view==='chats'||st.view==='profile'||st.view==='disputes'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():profileHtml();st.noAnim=false;st.pop=false}
  else _render();
 };
 function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
 function navHtml(){
- const v=st.view,ch=v==='chats'||st.from==='chats',d=v==='deals'||st.from==='deals',p=st.role==='p',n=Object.values(SUM).reduce((s,x)=>s+(x.unread||0),0);
+ const v=st.view,ch=v==='chats'||st.from==='chats',d=v==='deals'||st.from==='deals',p=st.role==='p',mod=st.prof&&st.prof.is_moderator,n=Object.values(SUM).reduce((s,x)=>s+(x.unread||0),0);
  const b=(c,l,f)=>`<button class="${c?'on':''}" onclick="${f}">${l}</button>`;
- return `<div class="tabs" style="max-width:${p?460:300}px;margin:6px 0 0">${b(!ch&&!d,'Запросы',"go('home')")}${b(ch,'Все чаты'+(n?`<span class="badge">${n}</span>`:''),'needChats()')}${p?b(d,'Мои сделки','needDeals()'):''}</div>`;
+ return `<div class="tabs" style="max-width:${mod?560:p?460:300}px;margin:6px 0 0">${b(!ch&&!d,'Запросы',"go('home')")}${b(ch,'Все чаты'+(n?`<span class="badge">${n}</span>`:''),'needChats()')}${p?b(d,'Мои сделки','needDeals()'):''}${mod?b(v==='disputes','Споры',"go('disputes')"):''}</div>`;
 }
 const _rc=reqCard;
 reqCard=function(r){
@@ -63,16 +64,19 @@ function profileHtml(){
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
- const bk=st.from==='chats'?`<button class="back" onclick="go('chats')">← Все чаты</button>`:st.from==='deals'?`<button class="back" onclick="go('deals')">← Мои сделки</button>`:`<button class="back" onclick="go('subject',${r.s})">← ${S[r.s]}</button>`;
+ const bk=st.from==='disputes'?`<button class="back" onclick="go('disputes')">← Споры</button>`:st.from==='chats'?`<button class="back" onclick="go('chats')">← Все чаты</button>`:st.from==='deals'?`<button class="back" onclick="go('deals')">← Мои сделки</button>`:`<button class="back" onclick="go('subject',${r.s})">← ${S[r.s]}</button>`;
  let act='';
  if(r.status==='taken'&&cust)act=`<button class="btn" ${w} onclick="payIt(${r.id})">Оплатить ${r.amount} ₽</button><p class="hint" style="margin-top:8px;text-align:center">Деньги удержатся до вашего подтверждения. На балансе: ${fm((st.prof&&st.prof.balance)||0)}</p>`;
  if(r.status==='paid')act=cust?`<button class="btn" ${w} onclick="confirmIt(${r.id})">Подтвердить выполнение</button><p class="hint" style="margin-top:8px;text-align:center">Нажми, когда работа тебя устроила: деньги уйдут исполнителю</p>`:`<div class="pay">Заказчик оплатил, деньги удержаны. Вы получите <b>${r.amount} ₽</b> после подтверждения.</div>`;
  if(r.status==='done')act=`<div class="pay">${cust?'Сделка завершена. Спасибо!':`Сделка завершена. На баланс зачислено: <b>${r.amount} ₽</b>`}</div>`+(MYREV?'<p class="hint">Отзыв оставлен</p>':`<div class="rv"><label>Оценка собеседнику</label><select id="rv_n">${[5,4,3,2,1].map(n=>`<option>${n}</option>`).join('')}</select><textarea id="rv_t" placeholder="Короткий отзыв (по желанию)"></textarea><button class="btn" onclick="review(${r.id})">Оставить отзыв</button></div>`);
  if(r.status==='cancelled')act='<div class="pay">Сделка отменена по согласию сторон. Если деньги были оплачены, они вернулись заказчику.</div>';
  if(live)act+=!r.cb?`<button class="btn ghost" ${w} onclick="cancelAsk(${r.id})">Предложить отмену сделки</button>`:r.cb===meId?`<div class="pay" style="margin-top:10px">Вы предложили отменить сделку. Ждём ответа.</div><button class="btn ghost" ${w} onclick="cancelAns(${r.id},false)">Отозвать предложение</button>`:`<div class="pay" style="margin-top:10px">Собеседник предлагает отменить сделку.</div><div class="two" style="margin-top:8px"><button class="btn" onclick="cancelAns(${r.id},true)">Согласиться</button><button class="btn ghost" onclick="cancelAns(${r.id},false)">Отклонить</button></div>`;
- const n=MSG.length,msgs=MSG.map((m,i)=>{const u=m.file_path&&FURL[m.file_path],ty=m.file_type||'',f=m.file_path?(u?(/^image\//.test(ty)?`<img src="${u}" class="att" alt="">`:/^video\//.test(ty)?`<video src="${u}" class="att" controls></video>`:`<a href="${u}" target="_blank" rel="noopener">📎 ${esc(m.file_name||'файл')}</a>`):'📎 …'):'';return `<div class="msg ${m.kind==='sys'?'sys':m.sender_id===meId?'me':''} ${st.pop&&i===n-1?'pop':''}">${f}${m.body?`<div>${esc(m.body)}</div>`:''}</div>`}).join('')||'<div class="msg sys">Начните диалог</div>';
+ if(live&&!r.disputed&&r.role!=='moderator')act+=`<button class="btn ghost" ${w} onclick="openDispute(${r.id})">Позвать модератора</button>`;
+ if(r.disputed&&r.role!=='moderator')act='<div class="pay">⚖️ Открыт спор. Модератор рассмотрит сделку. Оплата, подтверждение и отмена приостановлены, но писать в чат можно.</div>';
+ if(r.role==='moderator')act=modPanel(r);
+ const n=MSG.length,msgs=MSG.map((m,i)=>{const u=m.file_path&&FURL[m.file_path],ty=m.file_type||'',f=m.file_path?(u?(/^image\//.test(ty)?`<img src="${u}" class="att" alt="">`:/^video\//.test(ty)?`<video src="${u}" class="att" controls></video>`:`<a href="${u}" target="_blank" rel="noopener">📎 ${esc(m.file_name||'файл')}</a>`):'📎 …'):'';return `<div class="msg ${m.kind==='sys'?'sys':m.sender_id===meId?'me':''} ${st.pop&&i===n-1?'pop':''}">${m.sender_id&&m.sender_id!==r.cid&&m.sender_id!==r.pid?'<b>Модератор</b>':''}${f}${m.body?`<div>${esc(m.body)}</div>`:''}</div>`}).join('')||'<div class="msg sys">Начните диалог</div>';
  const inp=live?`<div class="send"><label class="btn ghost clip" title="Прикрепить файл (до 50 МБ)">📎<input type="file" hidden onchange="attach(${r.id},this)"></label><input type="text" id="mt" placeholder="Сообщение…" maxlength="2000" onkeydown="if(event.key==='Enter')send(${r.id})"><button class="btn" onclick="send(${r.id})">➤</button></div>`:'';
- return `${bk}<div class="card ${ra()}" style="margin-top:12px"><div class="row">${roleTag(r)}<span>${cust?'Исполнитель':'Заказчик'}: ${plink(o.id,o.n)}</span></div><div>${esc(r.text)}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div></div><div class="steps ${ra()}"><div class="on">Запрос</div><div class="${step>=1?'on':''}">В работе</div><div class="${step>=2?'on':''}">Оплачено</div></div><div class="card ${ra()}"><div class="chat" id="chat">${msgs}</div>${inp}${act}</div>`;
+ return `${bk}<div class="card ${ra()}" style="margin-top:12px"><div class="row">${roleTag(r)}<span>${r.role==='moderator'?'Заказчик: '+plink(r.cid,r.cn)+' · Исполнитель: '+plink(r.pid,r.pn):(cust?'Исполнитель':'Заказчик')+': '+plink(o.id,o.n)}</span></div><div>${esc(r.text)}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div></div><div class="steps ${ra()}"><div class="on">Запрос</div><div class="${step>=1?'on':''}">В работе</div><div class="${step>=2?'on':''}">Оплачено</div></div><div class="card ${ra()}"><div class="chat" id="chat">${msgs}</div>${inp}${act}</div>`;
 }
 
 /* ---------- действия ---------- */
@@ -120,3 +124,21 @@ function subAll(){
  }).subscribe();
 }
 sb.auth.onAuthStateChange((ev,s)=>{if(s)setTimeout(subAll,0);else if(allCh){sb.removeChannel(allCh);allCh=null}});
+
+/* ---------- v4: модератор и споры ---------- */
+Object.assign(ERR,{dispute_open:'Идёт спор: действие недоступно до решения модератора',already_open:'Спор уже открыт',bad_reason:'Опишите проблему хотя бы в паре слов',not_paid:'Выплата возможна только после оплаты',no_dispute:'Спор уже закрыт'});
+let DISP={};
+loadProf=async function(){if(!st.me){st.prof=null;return}const {data}=await sb.from('profiles').select('name,balance,is_moderator').eq('id',st.me.id).maybeSingle();st.prof=data||{name:'Студент',balance:0}};
+async function loadDisp(){const {data}=await sb.rpc('mod_disputes');DISP={};(data||[]).forEach(x=>DISP[x.request_id]=x);await loadReq();st.noAnim=true;render()}
+function disputesHtml(){
+ const l=R.filter(r=>r.role==='moderator'&&r.disputed);
+ return `<h1 class="${ra()}">Споры</h1><div class="list">${l.length?l.map(r=>{const d=DISP[r.id]||{};return `<button class="card ${ra()}" onclick="st.from='disputes';go('chat',${r.id})"><div class="row"><span class="role mod">Спор</span><span class="tag ${r.status}">${lab[r.status]}</span></div><b>${esc(r.cn||'')} → ${esc(r.pn||'')}</b><span class="sub">${S[r.s]} · ${r.amount} ₽</span><div class="sub">Причина: ${esc((d.reason||'').slice(0,120))}</div></button>`}).join(''):'<div class="sub">Открытых споров нет</div>'}</div>`;
+}
+const modPanel=r=>`<div class="pay">⚖️ Спор по сделке. Заказчик заплатил: <b>${r.amount} ₽</b>. Статус: ${lab[r.status]}.<br>Причина (${esc((DISP[r.id]||{}).opened_by_name||'')}): ${esc((DISP[r.id]||{}).reason||'—')}</div><textarea id="md_n" placeholder="Комментарий к решению (увидят обе стороны)" maxlength="500"></textarea><div class="two" style="margin-top:8px"><button class="btn" onclick="resolveIt(${r.id},'refund')">Вернуть заказчику</button>${r.status==='paid'?`<button class="btn" onclick="resolveIt(${r.id},'release')">Выплатить исполнителю</button>`:''}</div>`;
+function openDispute(id){const x=prompt('Опишите проблему (хотя бы пару слов). Оплата и отмена будут приостановлены до решения модератора.');if(x===null)return;rpc('open_dispute',{p_id:id,p_reason:x.trim()},'Спор открыт, модератор подключится')}
+async function resolveIt(id,d){
+ if(!confirm(d==='refund'?'Вернуть деньги заказчику и отменить сделку?':'Выплатить исполнителю и завершить сделку?'))return;
+ const {error}=await sb.rpc('resolve_dispute',{p_id:id,p_decision:d,p_note:($('md_n')&&$('md_n').value.trim())||''});
+ if(error)return t(em(error));
+ t('Спор решён');go('disputes');
+}

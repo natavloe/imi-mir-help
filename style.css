@@ -112,3 +112,5 @@ body::after{display:none}
 .clip{padding:0 12px;display:inline-flex;align-items:center;cursor:pointer}
 .rv{display:grid;gap:8px;margin-top:10px}
 .rv select{padding:8px;border-radius:8px;border:1px solid #ddd;font:inherit}
+.role.mod{background:#fef3c7;color:#b45309}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
