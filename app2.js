@@ -38,7 +38,7 @@ render=function(){
  if(st.view==='chats'||st.view==='profile'||st.view==='disputes'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():profileHtml();if(st.view==='profile')drawQr();st.noAnim=false;st.pop=false}
  else _render();
 };
-function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
+function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${st.prof&&st.prof.avatar_path?`<img src="${avUrl(st.prof.avatar_path,st.prof.avatar_at)}" alt="">`:esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
 function navHtml(){
  const v=st.view,ch=v==='chats'||st.from==='chats',d=v==='deals'||st.from==='deals',p=st.role==='p',mod=st.prof&&st.prof.is_moderator,n=Object.values(SUM).reduce((s,x)=>s+(x.unread||0),0);
  const b=(c,l,f)=>`<button class="${c?'on':''}" onclick="${f}">${l}</button>`;
@@ -60,7 +60,7 @@ function profileHtml(){
  const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
  if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
  const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
- return `${back}<h1 class="${ra()}" style="margin-top:10px">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+ return `${back}<div class="prh">${bigAv(p)}<h1 class="${ra()}" style="margin:0">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1></div><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
@@ -128,7 +128,7 @@ sb.auth.onAuthStateChange((ev,s)=>{if(s)setTimeout(subAll,0);else if(allCh){sb.r
 /* ---------- v4: модератор и споры ---------- */
 Object.assign(ERR,{dispute_open:'Идёт спор: действие недоступно до решения модератора',already_open:'Спор уже открыт',bad_reason:'Опишите проблему хотя бы в паре слов',not_paid:'Выплата возможна только после оплаты',no_dispute:'Спор уже закрыт'});
 let DISP={};
-loadProf=async function(){if(!st.me){st.prof=null;return}const {data}=await sb.from('profiles').select('name,balance,is_moderator').eq('id',st.me.id).maybeSingle();st.prof=data||{name:'Студент',balance:0}};
+loadProf=async function(){if(!st.me){st.prof=null;return}const {data}=await sb.from('profiles').select('name,balance,is_moderator,avatar_path,avatar_at').eq('id',st.me.id).maybeSingle();st.prof=data||{name:'Студент',balance:0}};
 async function loadDisp(){const {data}=await sb.rpc('mod_disputes');DISP={};(data||[]).forEach(x=>DISP[x.request_id]=x);await loadReq();st.noAnim=true;render()}
 function disputesHtml(){
  const l=R.filter(r=>r.role==='moderator'&&r.disputed);
@@ -177,5 +177,22 @@ function showQr(){
 
 function openSettings(){
  const p=PF||{};
- modal(`<h2 style="margin:0 0 12px">Настройки профиля</h2><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name||'')}"><label style="margin-top:10px;display:block">О себе</label><textarea id="pf_a" maxlength="500" style="width:100%;min-height:110px">${esc(p.about||'')}</textarea><div class="two" style="margin-top:12px"><button class="btn" onclick="saveProf()">Сохранить</button><button class="btn ghost" onclick="closeModal()">Отмена</button></div>`);
+ modal(`<h2 style="margin:0 0 12px">Настройки профиля</h2><div class="avrow">${bigAv(p)}<label class="btn ghost" style="cursor:pointer">Сменить фото<input type="file" accept="image/*" hidden onchange="setAvatar(this)"></label>${p.avatar_path?`<button class="btn ghost" onclick="delAvatar()">Удалить</button>`:''}</div><label>Имя</label><input type="text" id="pf_n" maxlength="50" value="${esc(p.name||'')}"><label style="margin-top:10px;display:block">О себе</label><textarea id="pf_a" maxlength="500" style="width:100%;min-height:110px">${esc(p.about||'')}</textarea><div class="two" style="margin-top:12px"><button class="btn" onclick="saveProf()">Сохранить</button><button class="btn ghost" onclick="closeModal()">Отмена</button></div>`);
 }
+
+/* ---------- v6: аватарки ---------- */
+const avUrl=(p,at)=>p?sb.storage.from('avatars').getPublicUrl(p).data.publicUrl+'?v='+(at?new Date(at).getTime():1):'';
+const bigAv=p=>`<div class="bigav">${p&&p.avatar_path?`<img src="${avUrl(p.avatar_path,p.avatar_at)}" alt="">`:esc(((p&&p.name)||'?')[0].toUpperCase())}</div>`;
+function toJpeg(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(i.width,i.height),c=document.createElement('canvas');c.width=c.height=256;c.getContext('2d').drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,256,256);URL.revokeObjectURL(u);c.toBlob(b=>b?res(b):rej(),'image/jpeg',.85)};i.onerror=rej;i.src=u})}
+async function setAvatar(inp){
+ const f=inp.files[0];inp.value='';if(!f)return;
+ if(!/^image\//.test(f.type))return t('Нужна картинка');
+ if(f.size>10*1024*1024)return t('Фото больше 10 МБ');
+ t('Загрузка…');let b;try{b=await toJpeg(f)}catch(e){return t('Не удалось прочитать фото')}
+ const p=st.me.id+'/avatar.jpg',u=await sb.storage.from('avatars').upload(p,b,{upsert:true,contentType:'image/jpeg'});
+ if(u.error)return t('Не удалось загрузить фото');
+ const {error}=await sb.rpc('set_avatar',{p_path:p});if(error)return t(em(error));
+ avDone('Фото обновлено');
+}
+async function delAvatar(){await sb.storage.from('avatars').remove([st.me.id+'/avatar.jpg']);const {error}=await sb.rpc('set_avatar',{p_path:null});if(error)return t(em(error));avDone('Фото удалено')}
+async function avDone(m){await Promise.all([loadProf(),loadPf(st.me.id)]);$('acc').innerHTML=accHtml();openSettings();t(m)}
