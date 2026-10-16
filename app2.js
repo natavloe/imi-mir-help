@@ -29,24 +29,25 @@ function needChats(){if(!st.me)return needAuth('Войдите, чтобы ув�
 const _go=go;
 go=function(v,id){
  if(v==='profile'){st.view='profile';st.form=false;st.pid=id;PF=null;PREV=[];render();window.scrollTo(0,0);loadPf(id);return}
+ if(v==='reports'){st.from=null;leaveChat();st.view='reports';render();window.scrollTo(0,0);loadRep();return}
  if(v==='disputes'){st.from=null;leaveChat();st.view='disputes';render();window.scrollTo(0,0);loadDisp();return}
  if(v==='chats'){st.from=null;leaveChat();st.view='chats';render();window.scrollTo(0,0);refresh();return}
  _go(v,id);
 };
 const _render=render;
 render=function(){
- if(st.view==='chats'||st.view==='profile'||st.view==='disputes'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():profileHtml();if(st.view==='profile')drawQr();st.noAnim=false;st.pop=false}
+ if(st.view==='chats'||st.view==='profile'||st.view==='disputes'||st.view==='reports'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():st.view==='reports'?reportsHtml():profileHtml();if(st.view==='profile')drawQr();st.noAnim=false;st.pop=false}
  else _render();
 };
 function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${st.prof&&st.prof.avatar_path?`<img src="${avUrl(st.prof.avatar_path,st.prof.avatar_at)}" alt="">`:esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
 function navHtml(){
  const v=st.view,ch=v==='chats'||st.from==='chats',d=v==='deals'||st.from==='deals',p=st.role==='p',mod=st.prof&&st.prof.is_moderator,n=Object.values(SUM).reduce((s,x)=>s+(x.unread||0),0);
  const b=(c,l,f)=>`<button class="${c?'on':''}" onclick="${f}">${l}</button>`;
- return `<div class="tabs" style="max-width:${mod?560:p?460:300}px;margin:6px 0 0">${b(!ch&&!d,'Запросы',"go('home')")}${b(ch,'Все чаты'+(n?`<span class="badge">${n}</span>`:''),'needChats()')}${p?b(d,'Мои сделки','needDeals()'):''}${mod?b(v==='disputes','Споры',"go('disputes')"):''}</div>`;
+ return `<div class="tabs" style="max-width:${mod?700:p?460:300}px;margin:6px 0 0">${b(!ch&&!d,'Запросы',"go('home')")}${b(ch,'Все чаты'+(n?`<span class="badge">${n}</span>`:''),'needChats()')}${p?b(d,'Мои сделки','needDeals()'):''}${mod?b(v==='disputes','Споры',"go('disputes')")+b(v==='reports','Жалобы',"go('reports')"):''}</div>`;
 }
 const _rc=reqCard;
 reqCard=function(r){
- const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
+ const rb=r.status==='open'&&r.role!=='customer'?` · <button class="lnk" onclick="event.stopPropagation();reportModal('request',${r.id})">Пожаловаться</button>`:'';const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}${rb}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
  return _rc(r).replace('<div class="meta">',who+'<div class="meta">');
 };
 
@@ -60,7 +61,7 @@ function profileHtml(){
  const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
  if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
  const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
- return `${back}<div class="prh">${bigAv(p)}<h1 class="${ra()}" style="margin:0">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1></div><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:''}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+ return `${back}<div class="prh">${bigAv(p)}<h1 class="${ra()}" style="margin:0">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1></div><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:(st.me?`<button class="lnk" style="margin-top:12px" onclick="reportModal('user','${p.id}')">Пожаловаться на пользователя</button>`:'')}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
@@ -102,6 +103,7 @@ async function attach(id,inp){
  if($('mt'))$('mt').value='';await loadMsgs();st.noAnim=true;st.pop=true;render();t('Файл отправлен');
 }
 async function saveProf(){
+ if(prof($('pf_n').value)||prof($('pf_a').value))return t(ERR.profanity);
  const {error}=await sb.rpc('update_profile',{p_name:$('pf_n').value.trim(),p_about:$('pf_a').value.trim()});
  if(error)return t(em(error));
  await Promise.all([loadProf(),loadPf(st.me.id)]);closeModal();t('Профиль сохранён');
@@ -162,6 +164,7 @@ addReq=async function(){
  if(x.length<10)return t('Опиши запрос подробнее');
  if(!b||b<50)return t('Укажи бюджет от 50 ₽');
  if(!$('f_ok').checked)return t('Подтверди условие про помощь в обучении');
+ if(prof(x))return t(ERR.profanity);
  await loadProf();const need=Math.round(b)-((st.prof&&st.prof.balance)||0);
  if(need>0)return lowBal(need);
  const {error}=await sb.rpc('create_request',{p_subject:st.sid,p_body:x,p_budget:Math.round(b),p_due:$('f_d').value||null});
@@ -196,3 +199,31 @@ async function setAvatar(inp){
 }
 async function delAvatar(){await sb.storage.from('avatars').remove([st.me.id+'/avatar.jpg']);const {error}=await sb.rpc('set_avatar',{p_path:null});if(error)return t(em(error));avDone('Фото удалено')}
 async function avDone(m){await Promise.all([loadProf(),loadPf(st.me.id)]);$('acc').innerHTML=accHtml();openSettings();t(m)}
+
+/* ---------- v7: жалобы, блокировка, фильтр нецензурных слов ---------- */
+Object.assign(ERR,{profanity:'В тексте есть недопустимые слова. Перефразируй, пожалуйста',not_open:'Скрыть можно только открытый запрос',blocked:'Аккаунт заблокирован'});
+const PRF=new RegExp("пизд|(^|[^а-я])ху(й|е|я|и)|(^|[^а-я])(за|вы|на|по|при|от|про|с|у|раз|до|под|об)?еб(ан|ат|ал|ну|уч|ло|ыр|ис|ет|ут|ешь|аш)|(^|[^а-я])бля($|[^а-я])|бляд|блят|муда(к|ч)|мудил|мудозв|(^|[^а-я])сук(а|и|у|ой)($|[^а-я])|пидор|пидар|пидр|залуп|гандон|шлюх|долб[оа]еб|дроч",'i');
+const LAT={x:'х',y:'у',a:'а',e:'е',o:'о',p:'р',c:'с'};
+const prof=s=>PRF.test(String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[xyaeopc]/g,c=>LAT[c]));
+const RSN={abuse:'Оскорбления, мат',cheating:'Просят сделать работу на сдачу',spam:'Спам, реклама',scam:'Мошенничество',other:'Другое'};
+let REP=[];
+function reportModal(type,id){
+ if(!st.me)return needAuth('Войдите, чтобы отправить жалобу');
+ modal(`<h2 style="margin:0 0 12px">Пожаловаться</h2><label>Причина</label><select id="rp_r" style="width:100%;padding:10px;border-radius:10px;font:inherit">${Object.keys(RSN).map(k=>`<option value="${k}">${RSN[k]}</option>`).join('')}</select><label style="margin-top:10px;display:block">Подробности (по желанию)</label><textarea id="rp_d" maxlength="500" style="width:100%;min-height:90px"></textarea><div class="two" style="margin-top:12px"><button class="btn" onclick="sendReport('${type}','${id}')">Отправить</button><button class="btn ghost" onclick="closeModal()">Отмена</button></div>`);
+}
+async function sendReport(type,id){
+ const a=type==='user'?{p_user:id,p_reason:$('rp_r').value,p_details:$('rp_d').value.trim()}:{p_id:+id,p_reason:$('rp_r').value,p_details:$('rp_d').value.trim()};
+ const {error}=await sb.rpc(type==='user'?'report_user':'report_request',a);
+ if(error)return t(error.code==='23505'?'Вы уже отправляли жалобу, модератор её рассмотрит':em(error));
+ closeModal();t('Жалоба отправлена, модератор рассмотрит');
+}
+async function loadRep(){const {data}=await sb.rpc('mod_reports');REP=data||[];st.noAnim=true;render()}
+function reportsHtml(){
+ return `<h1 class="${ra()}">Жалобы</h1><div class="list">${REP.length?REP.map(x=>`<div class="card ${ra()}"><div class="row"><span class="role mod">${x.target_type==='user'?'На пользователя':'На запрос'}</span><span class="sub">${RSN[x.reason]||x.reason}</span></div><div class="sub">Пожаловался: ${esc(x.reporter_name||'')}</div>${x.target_type==='request'?`<div>${esc((x.request_body||'').slice(0,300))}</div><div class="sub">Автор: ${plink(x.target_user,x.target_user_name)} · статус запроса: ${lab[x.request_status]||x.request_status}</div>`:`<div>${plink(x.target_user,x.target_user_name)}${x.target_blocked?' <span class="sub">(уже заблокирован)</span>':''}</div>`}${x.details?`<div class="sub">«${esc(x.details)}»</div>`:''}<div class="two" style="margin-top:6px"><button class="btn ghost" onclick="resolveRep(${x.report_id},'dismiss')">Закрыть жалобу</button>${x.target_type==='request'&&x.request_status==='open'?`<button class="btn ghost" onclick="resolveRep(${x.report_id},'hide_request')">Скрыть запрос</button>`:''}${!x.target_blocked?`<button class="btn" onclick="resolveRep(${x.report_id},'block_user')">Заблокировать пользователя</button>`:''}</div></div>`).join(''):'<div class="sub">Открытых жалоб нет</div>'}</div>`;
+}
+async function resolveRep(id,act){
+ if(act==='block_user'&&!confirm('Заблокировать пользователя? Он не сможет войти в аккаунт.'))return;
+ const {error}=await sb.rpc('resolve_report',{p_id:id,p_action:act});
+ if(error)return t(em(error));
+ t(act==='dismiss'?'Жалоба закрыта':act==='hide_request'?'Запрос скрыт':'Пользователь заблокирован');loadRep();
+}
