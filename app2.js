@@ -37,7 +37,7 @@ go=function(v,id){
 const _render=render;
 render=function(){
  if(st.view==='chats'||st.view==='profile'||st.view==='disputes'||st.view==='reports'){k=0;$('seg').dataset.r=st.role;$('acc').innerHTML=accHtml();$('nav').innerHTML=navHtml();$('app').innerHTML=st.view==='chats'?chatsHtml():st.view==='disputes'?disputesHtml():st.view==='reports'?reportsHtml():profileHtml();if(st.view==='profile')drawQr();st.noAnim=false;st.pop=false}
- else _render();
+ else{_render();addFileUi();fl()}
 };
 function accHtml(){return st.me?`<div class="who"><button class="bal" onclick="go('wallet')">${fm((st.prof&&st.prof.balance)||0)}</button><button class="who-p" onclick="openProfile('${st.me.id}')"><span class="av">${st.prof&&st.prof.avatar_path?`<img src="${avUrl(st.prof.avatar_path,st.prof.avatar_at)}" alt="">`:esc(((st.prof&&st.prof.name)||st.me.email||'?')[0].toUpperCase())}</span><span class="nm">${esc((st.prof&&st.prof.name)||'')}</span></button><button class="lnk" onclick="logout()">Выйти</button></div>`:`<button class="btn" style="padding:8px 16px" onclick="needAuth('')">Войти</button>`}
 function navHtml(){
@@ -48,7 +48,7 @@ function navHtml(){
 const _rc=reqCard;
 reqCard=function(r){
  const rb=r.status==='open'&&r.role!=='customer'?` · <button class="lnk" onclick="event.stopPropagation();reportModal('request',${r.id})">Пожаловаться</button>`:'';const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}${rb}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
- return _rc(r).replace('<div class="meta">',who+'<div class="meta">');
+ return _rc(r).replace('<div class="meta">',who+filesHtml(r.id)+'<div class="meta">');
 };
 
 /* ---------- экраны ---------- */
@@ -77,7 +77,7 @@ function chatHtml(r){
  if(r.role==='moderator')act=modPanel(r);
  const n=MSG.length,msgs=MSG.map((m,i)=>{const u=m.file_path&&FURL[m.file_path],ty=m.file_type||'',f=m.file_path?(u?(/^image\//.test(ty)?`<img src="${u}" class="att" alt="">`:/^video\//.test(ty)?`<video src="${u}" class="att" controls></video>`:`<a href="${u}" target="_blank" rel="noopener">📎 ${esc(m.file_name||'файл')}</a>`):'📎 …'):'';return `<div class="msg ${m.kind==='sys'?'sys':m.sender_id===meId?'me':''} ${st.pop&&i===n-1?'pop':''}">${m.sender_id&&m.sender_id!==r.cid&&m.sender_id!==r.pid?'<b>Модератор</b>':''}${f}${m.body?`<div>${esc(m.body)}</div>`:''}</div>`}).join('')||'<div class="msg sys">Начните диалог</div>';
  const inp=live?`<div class="send"><label class="btn ghost clip" title="Прикрепить файл (до 50 МБ)">📎<input type="file" hidden onchange="attach(${r.id},this)"></label><input type="text" id="mt" placeholder="Сообщение…" maxlength="2000" onkeydown="if(event.key==='Enter')send(${r.id})"><button class="btn" onclick="send(${r.id})">➤</button></div>`:'';
- return `${bk}<div class="card ${ra()}" style="margin-top:12px"><div class="row">${roleTag(r)}<span>${r.role==='moderator'?'Заказчик: '+plink(r.cid,r.cn)+' · Исполнитель: '+plink(r.pid,r.pn):(cust?'Исполнитель':'Заказчик')+': '+plink(o.id,o.n)}</span></div><div>${esc(r.text)}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div></div><div class="steps ${ra()}"><div class="on">Запрос</div><div class="${step>=1?'on':''}">В работе</div><div class="${step>=2?'on':''}">Оплачено</div></div><div class="card ${ra()}"><div class="chat" id="chat">${msgs}</div>${inp}${act}</div>`;
+ return `${bk}<div class="card ${ra()}" style="margin-top:12px"><div class="row">${roleTag(r)}<span>${r.role==='moderator'?'Заказчик: '+plink(r.cid,r.cn)+' · Исполнитель: '+plink(r.pid,r.pn):(cust?'Исполнитель':'Заказчик')+': '+plink(o.id,o.n)}</span></div><div>${esc(r.text)}</div>${filesHtml(r.id)}<div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div></div><div class="steps ${ra()}"><div class="on">Запрос</div><div class="${step>=1?'on':''}">В работе</div><div class="${step>=2?'on':''}">Оплачено</div></div><div class="card ${ra()}"><div class="chat" id="chat">${msgs}</div>${inp}${act}</div>`;
 }
 
 /* ---------- действия ---------- */
@@ -167,9 +167,9 @@ addReq=async function(){
  if(prof(x))return t(ERR.profanity);
  await loadProf();const need=Math.round(b)-((st.prof&&st.prof.balance)||0);
  if(need>0)return lowBal(need);
- const {error}=await sb.rpc('create_request',{p_subject:st.sid,p_body:x,p_budget:Math.round(b),p_due:$('f_d').value||null});
+ const {data:nid,error}=await sb.rpc('create_request',{p_subject:st.sid,p_body:x,p_budget:Math.round(b),p_due:$('f_d').value||null});
  if(error){if(/insufficient_funds/.test(error.message||''))return lowBal(Math.round(b));return t(em(error))}
- st.form=false;await loadReq();render();t('Запрос опубликован');
+ const up=PEND.length?await uploadReqFiles(nid):true;PEND=[];st.form=false;await loadReq();render();t(up?'Запрос опубликован':'Запрос опубликован, но часть файлов не загрузилась');
 };
 
 function showQr(){
@@ -226,4 +226,53 @@ async function resolveRep(id,act){
  const {error}=await sb.rpc('resolve_report',{p_id:id,p_action:act});
  if(error)return t(em(error));
  t(act==='dismiss'?'Жалоба закрыта':act==='hide_request'?'Запрос скрыт':'Пользователь заблокирован');loadRep();
+}
+
+/* ---------- v8: файлы и фото в запросах ---------- */
+Object.assign(ERR,{too_many_files:'Не больше 5 файлов в запросе'});
+let PEND=[],RF={},RFU={},RFT=Date.now();
+function addFileUi(){
+ const c=$('f_ok');if(!c||$('f_files'))return;
+ const d=document.createElement('div');
+ d.innerHTML='<label class="btn ghost" style="cursor:pointer;display:inline-block">📎 Прикрепить фото или файлы<input type="file" id="f_files" multiple hidden onchange="pickFiles(this)"></label><p class="hint" style="margin:6px 0 0">До 5 файлов, каждый до 50 МБ. Исполняемые файлы (.exe, .bat и т.п.) запрещены.</p><div id="f_list"></div>';
+ (c.closest('.chk')||c.parentNode).before(d);
+}
+function fl(){
+ const e=$('f_list');if(!e){PEND=[];return}
+ e.innerHTML=PEND.map((f,i)=>`<div class="fitem">📎 ${esc(f.name)} <button class="lnk" onclick="PEND.splice(${i},1);fl()">убрать</button></div>`).join('');
+}
+function pickFiles(inp){
+ for(const f of inp.files){
+  if(PEND.length>=5){t('Не больше 5 файлов');break}
+  if(f.size>MAXF){t('«'+f.name+'» больше 50 МБ');continue}
+  if(BAD.test(f.name)){t('Тип файла «'+f.name+'» запрещён');continue}
+  PEND.push(f);
+ }
+ inp.value='';fl();
+}
+async function uploadReqFiles(id){
+ const meta=[];let ok=true;
+ for(const f of PEND){
+  const ext=(f.name.split('.').pop()||'bin').replace(/[^a-z0-9]/gi,'').slice(0,8)||'bin',p=`${id}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const u=await sb.storage.from('request-files').upload(p,f,{contentType:f.type||'application/octet-stream'});
+  if(u.error){ok=false;continue}
+  meta.push({path:p,name:f.name.slice(0,200),type:f.type||'',size:f.size});
+ }
+ if(meta.length){const {error}=await sb.rpc('add_request_files',{p_id:id,p_files:meta});if(error)ok=false}
+ return ok;
+}
+async function loadFiles(){
+ if(!st.me||!R.length){RF={};return}
+ const {data}=await sb.from('v_request_files').select('*').in('request_id',R.map(r=>r.id));
+ RF={};(data||[]).forEach(f=>(RF[f.request_id]=RF[f.request_id]||[]).push(f));
+ if(Date.now()-RFT>3000000){RFU={};RFT=Date.now()}
+ const ps=(data||[]).map(f=>f.path).filter(p=>!RFU[p]);
+ if(ps.length){const {data:u}=await sb.storage.from('request-files').createSignedUrls(ps,3600);(u||[]).forEach(x=>{if(x.signedUrl)RFU[x.path]=x.signedUrl})}
+}
+const _lr=loadReq;
+loadReq=async function(){await _lr();await loadFiles()};
+function filesHtml(id){
+ const l=RF[id]||[];if(!l.length)return '';
+ return '<div class="files">'+l.map(f=>{const u=RFU[f.path];if(!u)return '';
+  return /^image\//.test(f.type)?`<a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img class="thumb" src="${u}" alt=""></a>`:`<a class="fl" href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📎 ${esc(f.name)}</a>`}).join('')+'</div>';
 }
