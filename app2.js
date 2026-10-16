@@ -145,7 +145,7 @@ async function resolveIt(id,d){
 
 /* ---------- v5: ссылка и QR профиля, проверка баланса ---------- */
 const profLink=id=>location.origin+location.pathname+'#u='+id;
-const shareHtml=id=>`<h2 class="sec">Поделиться профилем</h2><div class="card"><input type="text" id="pl" readonly value="${profLink(id)}" onclick="this.select()"><div class="two" style="margin-top:8px"><button class="btn" onclick="copyLink()">Скопировать ссылку</button>${navigator.share?`<button class="btn ghost" onclick="shareLink()">Отправить…</button>`:''}</div><div id="qr" class="qr"></div><p class="hint" style="text-align:center">QR-код ведёт на твой профиль. Друзьям нужно войти в аккаунт, чтобы его открыть.</p></div>`;
+const shareHtml=id=>`<h2 class="sec">Поделиться профилем</h2><div class="card"><input type="text" id="pl" readonly value="${profLink(id)}" onclick="this.select()"><div class="two" style="margin-top:8px"><button class="btn" onclick="copyLink()">Скопировать ссылку</button><button class="btn" onclick="showQr()">QR-код</button>${navigator.share?`<button class="btn ghost" onclick="shareLink()">Отправить…</button>`:''}</div><p class="hint" style="text-align:center">QR-код ведёт на твой профиль. Друзьям нужно войти в аккаунт, чтобы его открыть.</p></div>`;
 function drawQr(){const e=$('qr');if(!e)return;if(typeof qrcode==='undefined'){e.textContent='QR-код не загрузился, но ссылка работает';return}const q=qrcode(0,'M');q.addData(profLink(st.me.id));q.make();e.innerHTML='<img alt="QR-код профиля" src="'+q.createDataURL(6,4)+'">'}
 function copyLink(){const l=profLink(st.me.id);(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(()=>t('Ссылка скопирована')).catch(()=>{const i=$('pl');i.select();document.execCommand('copy');t('Ссылка скопирована')})}
 function shareLink(){navigator.share({title:'Мой профиль в IMI MIR - Help',url:profLink(st.me.id)}).catch(()=>{})}
@@ -168,3 +168,9 @@ addReq=async function(){
  if(error){if(/insufficient_funds/.test(error.message||''))return lowBal(Math.round(b));return t(em(error))}
  st.form=false;await loadReq();render();t('Запрос опубликован');
 };
+
+function showQr(){
+ if(typeof qrcode==='undefined')return t('QR-код не загрузился, используй ссылку');
+ const q=qrcode(0,'M');q.addData(profLink(st.me.id));q.make();
+ modal(`<h2 style="margin:0 0 12px;text-align:center">Мой профиль</h2><div class="qr"><img alt="QR-код профиля" src="${q.createDataURL(6,4)}"></div><p class="hint" style="text-align:center">Покажи код другу: он откроет твой профиль</p><button class="btn" style="width:100%" onclick="closeModal()">Закрыть</button>`);
+}
