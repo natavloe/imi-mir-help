@@ -22,12 +22,13 @@ async function loadPf(id){
 const other=r=>r.role==='customer'?{id:r.pid,n:r.pn}:{id:r.cid,n:r.cn};
 const roleTag=r=>r.role==='customer'?'<span class="role cust">Вы заказчик</span>':r.role==='moderator'?'<span class="role mod">Модератор</span>':'<span class="role perf">Вы исполнитель</span>';
 const plink=(id,n)=>`<button class="lnk" onclick="openProfile('${id}')">${esc(n||'Студент')}</button>`;
-function openProfile(id){st.pb={v:st.view,id:st.view==='chat'?st.rid:st.sid};go('profile',id)}
+function openProfile(id){st.pbReq=null;st.pb={v:st.view,id:st.view==='chat'?st.rid:st.sid};go('profile',id)}
 function needChats(){if(!st.me)return needAuth('Войдите, чтобы увидеть чаты');go('chats')}
 
 /* ---------- навигация и рендер ---------- */
 const _go=go;
 go=function(v,id){
+ if(v!=='profile')st.pbReq=null;
  if(v==='profile'){st.view='profile';st.form=false;st.pid=id;PF=null;PREV=[];render();window.scrollTo(0,0);loadPf(id);return}
  if(v==='reports'){st.from=null;leaveChat();st.view='reports';render();window.scrollTo(0,0);loadRep();return}
  if(v==='disputes'){st.from=null;leaveChat();st.view='disputes';render();window.scrollTo(0,0);loadDisp();return}
@@ -48,7 +49,9 @@ function navHtml(){
 const _rc=reqCard;
 reqCard=function(r){
  const rb=r.status==='open'&&r.role!=='customer'?` · <button class="lnk" onclick="event.stopPropagation();reportModal('request',${r.id})">Пожаловаться</button>`:'';const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}${rb}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
- return _rc(r).replace('<div class="meta">',who+filesHtml(r.id)+'<div class="meta">');
+ let h=_rc(r);
+ if(st.role==='p'&&r.status==='open'&&r.role!=='customer')h=h.replace(`<button class="btn" onclick="take(${r.id})">Откликнуться</button>`,`<div class="two"><button class="btn" onclick="take(${r.id})">Откликнуться</button><button class="btn ghost" onclick="viewCustomer(${r.id})">Профиль заказчика</button></div>`);
+ return h.replace('<div class="meta">',who+filesHtml(r.id)+'<div class="meta">');
 };
 
 /* ---------- экраны ---------- */
@@ -58,10 +61,10 @@ function chatsHtml(){
  return `<h1 class="${ra()}">Все чаты</h1><div class="tabs ${ra()}" style="max-width:460px">${T.map(x=>`<button class="${f===x[0]?'on':''}" onclick="st.cf='${x[0]}';st.noAnim=true;render()">${x[1]} ${all.filter(r=>G[x[0]].test(r.status)).length}</button>`).join('')}</div><div class="list">${list.length?list.map(r=>`<button class="card ${ra()}" onclick="st.from='chats';go('chat',${r.id})"><div class="row">${roleTag(r)}<span class="tag ${r.status}">${lab[r.status]}</span></div><div class="row"><b>${esc(other(r).n||'Студент')}</b>${un(r)}</div><span class="sub">${S[r.s]}</span><div class="sub">${pv(r)}</div></button>`).join(''):'<div class="sub">Здесь пока пусто</div>'}</div>`;
 }
 function profileHtml(){
- const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← Назад</button>`;
+ const b=st.pb,own=st.me&&st.pid===st.me.id,p=PF,back=`<button class="back" onclick="go('${(b&&b.v)||'home'}'${b&&b.id!=null?','+b.id:''})">← ${st.pbReq?'К заявке':'Назад'}</button>`;
  if(!p)return back+'<div class="sub" style="margin-top:12px">Загрузка…</div>';
  const dt=x=>new Date(x).toLocaleDateString('ru-RU'),rt=p.reviews?`★ ${(+p.rating).toFixed(1)} · отзывов: ${p.reviews}`:'Отзывов пока нет';
- return `${back}<div class="prh">${bigAv(p)}<h1 class="${ra()}" style="margin:0">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1></div><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:(st.me?`<button class="lnk" style="margin-top:12px" onclick="reportModal('user','${p.id}')">Пожаловаться на пользователя</button>`:'')}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
+ return `${back}${reqBar()}<div class="prh">${bigAv(p)}<h1 class="${ra()}" style="margin:0">${esc(p.name)}${own?' <span class="sub">(это вы)</span>':''}</h1></div><div class="card ${ra()}"><div class="meta"><span>На сайте с: <b>${p.created_at?dt(p.created_at):'—'}</b></span><span>Завершённых сделок: <b>${p.done}</b></span><span>${rt}</span></div><div>${p.about?esc(p.about):'<span class="sub">О себе ничего не указано</span>'}</div></div>${own?`<button class="btn ghost" style="margin-top:12px" onclick="openSettings()">⚙️ Настройки профиля</button>`:(st.me?`<button class="lnk" style="margin-top:12px" onclick="reportModal('user','${p.id}')">Пожаловаться на пользователя</button>`:'')}${own?shareHtml(p.id):''}<h2 class="sec">Отзывы</h2><div class="list" style="margin-top:0">${PREV.length?PREV.map(x=>`<div class="card"><div class="row"><b>${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</b><span class="sub">${esc(x.author_name||'')}</span></div>${x.body?`<div>${esc(x.body)}</div>`:''}</div>`).join(''):'<div class="sub">Пока нет отзывов</div>'}</div>`;
 }
 function chatHtml(r){
  const step=r.status==='taken'?1:2,meId=st.me&&st.me.id,cust=r.role==='customer',o=other(r),live=/^(taken|paid)$/.test(r.status),w='style="margin-top:12px;width:100%"';
@@ -275,4 +278,15 @@ function filesHtml(id){
  const l=RF[id]||[];if(!l.length)return '';
  return '<div class="files">'+l.map(f=>{const u=RFU[f.path];if(!u)return '';
   return /^image\//.test(f.type)?`<a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img class="thumb" src="${u}" alt=""></a>`:`<a class="fl" href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📎 ${esc(f.name)}</a>`}).join('')+'</div>';
+}
+
+/* ---------- v9: профиль заказчика из карточки заявки ---------- */
+function viewCustomer(rid){
+ const r=R.find(x=>x.id===rid);if(!r||!r.cid)return;
+ if(!st.me)return needAuth('Войдите, чтобы посмотреть профиль заказчика');
+ st.pb={v:st.view,id:st.sid};st.pbReq=rid;go('profile',r.cid);
+}
+function reqBar(){
+ const r=st.pbReq&&R.find(x=>x.id===st.pbReq);if(!r)return '';
+ return `<div class="card ${ra()}" style="margin-top:12px"><span class="sub">Заявка, из которой вы пришли</span><div>${esc(r.text.slice(0,300))}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div>${r.status==='open'&&r.role!=='customer'?`<button class="btn" onclick="take(${r.id})">Откликнуться на заявку</button><p class="hint" style="margin:6px 0 0">Профиль можно смотреть без обязательств: заявка остаётся открытой, пока вы не откликнетесь.</p>`:'<p class="hint" style="margin:6px 0 0">Эта заявка уже не открыта</p>'}</div>`;
 }
