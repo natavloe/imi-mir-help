@@ -5,7 +5,7 @@ const BAD=/\.(exe|bat|cmd|com|msi|scr|ps1|vbs|js|jar|sh|apk|dll|lnk)$/i,MAXF=50*
 let FURL={},PF=null,PREV=[],MYREV=false;
 
 /* ---------- данные ---------- */
-async function loadReq(){const {data,error}=await sb.from('v_requests').select('*').order('created_at',{ascending:false});if(!error)R=(data||[]).map(x=>({id:x.id,s:x.subject,text:x.body,amount:x.amount,due:x.due,status:x.status,role:x.my_role,cid:x.customer_id,pid:x.performer_id,cn:x.customer_name,pn:x.performer_name,cb:x.cancel_by}))}
+async function loadReq(){const {data,error}=await sb.from('v_requests').select('*').order('created_at',{ascending:false});if(!error)R=(data||[]).map(x=>({id:x.id,s:x.subject,text:x.body,amount:x.amount,due:x.due,status:x.status,role:x.my_role,cid:x.customer_id,pid:x.performer_id,cn:x.customer_name,pn:x.performer_name,cb:x.cancel_by,ca:x.created_at}))}
 async function loadMsgs(){
  if(!st.rid)return;
  const {data}=await sb.from('messages').select('*').eq('request_id',st.rid).order('created_at');MSG=data||[];
@@ -50,6 +50,7 @@ const _rc=reqCard;
 reqCard=function(r){
  const rb=r.status==='open'&&r.role!=='customer'?` · <button class="lnk" onclick="event.stopPropagation();reportModal('request',${r.id})">Пожаловаться</button>`:'';const who=st.role==='p'&&r.cn?`<div class="sub">Заказчик: ${plink(r.cid,r.cn)}${rb}</div>`:(st.role==='c'&&r.pid?`<div class="sub">Исполнитель: ${plink(r.pid,r.pn)}</div>`:'');
  let h=_rc(r);
+ if(r.status==='open'&&r.role==='customer'&&r.ca){const hl=Math.max(1,Math.ceil((new Date(r.ca).getTime()+48*3600000-Date.now())/3600000));h=h.replace('Ждём отклика исполнителя…',`Ждём отклика исполнителя. Если никто не откликнется, заявка удалится через ${hl} ч`)}
  if(st.role==='p'&&r.status==='open'&&r.role!=='customer')h=h.replace(`<button class="btn" onclick="take(${r.id})">Откликнуться</button>`,`<div class="two"><button class="btn" onclick="take(${r.id})">Откликнуться</button><button class="btn ghost" onclick="viewCustomer(${r.id})">Профиль заказчика</button></div>`);
  return h.replace('<div class="meta">',who+filesHtml(r.id)+'<div class="meta">');
 };
@@ -290,3 +291,6 @@ function reqBar(){
  const r=st.pbReq&&R.find(x=>x.id===st.pbReq);if(!r)return '';
  return `<div class="card ${ra()}" style="margin-top:12px"><span class="sub">Заявка, из которой вы пришли</span><div>${esc(r.text.slice(0,300))}</div><div class="meta">${money(r)}<span>Срок: <b>${fmtD(r.due)}</b></span></div>${r.status==='open'&&r.role!=='customer'?`<button class="btn" onclick="take(${r.id})">Откликнуться на заявку</button><p class="hint" style="margin:6px 0 0">Профиль можно смотреть без обязательств: заявка остаётся открытой, пока вы не откликнетесь.</p>`:'<p class="hint" style="margin:6px 0 0">Эта заявка уже не открыта</p>'}</div>`;
 }
+
+/* ---------- v10: заявки без отклика удаляются через 48 часов (на сервере, pg_cron) ---------- */
+Object.assign(lab,{expired:'Удалена по сроку'});
